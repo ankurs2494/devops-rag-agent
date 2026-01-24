@@ -1,0 +1,25 @@
+# LangChain ecosystem (fully compatible)
+langchain==0.3.7
+langchain-community==0.3.7
+langchain-core==0.3.25
+
+# Ollama
+langchain-ollama==0.2.0
+
+# Vector store
+langchain-chroma>=0.1.0
+chromadb>=0.5.3
+
+# PDF
+pypdf>=4.0.1
+
+# Pydantic v2
+pydantic>=2.7.4,<3
+pydantic-settings>=2.2.1
+
+# FastAPI
+fastapi
+uvicorn
+tiktoken
+requests
+tqdm
