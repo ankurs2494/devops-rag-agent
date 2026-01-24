@@ -91,4 +91,12 @@ The agent is **grounded, auditable, and constrained** by RAG and tools.
 * [ ] Persistent memory layer
 
 
+## Agent Snippet
+
+<img width="1261" height="586" alt="image" src="https://github.com/user-attachments/assets/24cbbe12-259a-4e30-9ed7-3db73d811d60" />
+
+---
+
+<img width="1252" height="580" alt="image" src="https://github.com/user-attachments/assets/bbfb65f8-fd42-4be5-8914-526c9cda8b81" />
+
 
