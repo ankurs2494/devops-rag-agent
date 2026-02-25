@@ -17,7 +17,7 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 
 COLLECTION_MAP = {
-    "k8s-networking.pdf": "k8s-networking",
+    "kubernetes-networking.pdf": "kubernetes-networking",
     "k8s-storage.pdf": "k8s-storage",
     "terraform-aws.pdf": "terraform-aws",
     "terraform-azure.pdf": "terraform-azure",

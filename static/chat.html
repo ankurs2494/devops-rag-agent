@@ -8,9 +8,8 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -47,10 +46,7 @@
       cursor: pointer;
       color: #374151;
     }
-
-    .clear-btn:hover {
-      background: #f3f4f6;
-    }
+    .clear-btn:hover { background: #f3f4f6; }
 
     /* ================= CHAT ================= */
     #chat {
@@ -68,12 +64,13 @@
       font-size: 16px;
       background: #ffffff;
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
     }
 
     .user {
       background: #e8f0fe;
       border-left: 4px solid #1a73e8;
-      padding: 4px 8px;
     }
 
     .bot {
@@ -86,13 +83,8 @@
       font-style: italic;
     }
 
-    .message ul {
-      padding-left: 12px;
-    }
-
-    .message li {
-      margin-bottom: 6px;
-    }
+    .message ul { padding-left: 18px; }
+    .message li { margin-bottom: 6px; }
 
     /* ================= INPUT ================= */
     .input-container {
@@ -120,25 +112,57 @@
       border-radius: 8px;
       border: none;
       cursor: pointer;
-      background: #1a73e8;
+      background: #34d7101c;
       color: white;
     }
-
-    .input-container button:hover {
-      background: #1558c0;
-    }
+    .input-container button:hover { background: #1558c0; }
 
     /* ================= ANIMATED DOTS ================= */
-    .dots::after {
-      content: '';
-      animation: dots 1.5s steps(4, end) infinite;
-    }
-
+    .dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
     @keyframes dots {
       0%   { content: ''; }
       25%  { content: '.'; }
       50%  { content: '..'; }
       75%  { content: '...'; }
+    }
+
+    /* ================= CODE BLOCKS ================= */
+
+    .code-block {
+      position: relative;
+      background: #f5f3f1e8;
+      border-radius: 6px;
+      padding: 12px;
+      margin: 12px 0;
+    }
+
+    .code-block pre {
+      margin: 0;
+      color: #0b0101;        /* was #e5e7eb, now bright white */
+      font-size: 14px;       /* slightly larger for readability */
+      line-height: 1.6;      /* better spacing between lines*/
+      font-family: "Fira Code", "Cascadia Code", Consolas, monospace;  /* nicer mono font*/
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #334155;
+      color: white;
+      border: none;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    .copy-btn:hover { background: #475569; }
+
+    .message code {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.95em;
     }
   </style>
 </head>
@@ -157,20 +181,97 @@
   <!-- Input -->
   <footer class="input-container">
     <input id="question" type="text" placeholder="Ask your DevOps question..." />
-    <button onclick="send()">Send</button>
+    <button id="sendBtn">Send</button>
   </footer>
 
+
   <script>
+    /* ================= MARKED CONFIG ================= */
+    marked.setOptions({
+      breaks: true,
+      gfm: true
+    });
+
+    const renderer = new marked.Renderer();
+
+
+    renderer.code = function (token) {
+        // ✅ marked v5+ passes token object: { type, raw, text, lang }
+        const code = typeof token === "string" ? token : (token.text || token.raw || String(token));
+        const language = typeof token === "object" ? (token.lang || "text") : (token || "text");
+
+        const escaped = code
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+
+        const lang = (typeof language === "string" && language.trim()) ? language.trim() : "text";
+
+        return `
+          <div class="code-block">
+            <button class="copy-btn" type="button" data-copy-btn>Copy</button>
+            <pre><code class="language-${lang}">${escaped}</code></pre>
+          </div>
+        `;
+  };
+
+
+    renderer.codespan = function (token) {
+        // ✅ marked v5+ passes a token object, not a string
+        const text = typeof token === "string" ? token : (token.text || token.raw || String(token));
+
+        const escaped = text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+        return `<code>${escaped}</code>`;
+  };
+
+    marked.use({ renderer });
+
     /* ================= STORAGE ================= */
     const STORAGE_KEY = "devops_agent_chat";
+    const CACHE_VERSION = "v3"; // ✅ bumped to wipe bad cached objects
+    const VERSION_KEY = "devops_agent_cache_version";
 
     function loadMessages() {
+      const version = localStorage.getItem(VERSION_KEY);
+      if (version !== CACHE_VERSION) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.setItem(VERSION_KEY, CACHE_VERSION);
+        return [];
+      }
+
       const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+
+      try {
+        const parsed = JSON.parse(saved);
+        // ✅ Normalize: ensure content is always a string
+        return Array.isArray(parsed) ? parsed.map(m => ({
+          role: m?.role === "user" ? "user" : "bot",
+          content: (typeof m?.content === "string") ? m.content : safeToString(m?.content)
+        })) : [];
+      } catch (e) {
+        console.warn("Failed to parse saved chat history, clearing.", e);
+        localStorage.removeItem(STORAGE_KEY);
+        return [];
+      }
     }
 
     function saveMessages(messages) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      localStorage.setItem(VERSION_KEY, CACHE_VERSION);
+    }
+
+    function safeToString(val) {
+      if (typeof val === "string") return val;
+      try { return JSON.stringify(val, null, 2); }
+      catch { return String(val); }
     }
 
     /* ================= STATE ================= */
@@ -181,11 +282,12 @@
     const chat = document.getElementById("chat");
     const input = document.getElementById("question");
     const clearBtn = document.getElementById("clearBtn");
+    const sendBtn = document.getElementById("sendBtn");
 
     /* ================= RESTORE CHAT ================= */
     window.addEventListener("load", () => {
       messages.forEach(msg => {
-        addMessage(msg.content, msg.role === "user" ? "user" : "bot");
+        addMessage(msg.content, msg.role === "user" ? "user" : "bot", /*persist*/ false);
       });
     });
 
@@ -194,9 +296,10 @@
       if (e.key === "Enter") send();
     });
 
+    sendBtn.addEventListener("click", () => send());
+
     clearBtn.addEventListener("click", () => {
       if (!confirm("Clear entire chat history?")) return;
-
       chat.innerHTML = "";
       messages = [];
       localStorage.removeItem(STORAGE_KEY);
@@ -204,19 +307,43 @@
     });
 
     /* ================= UI ================= */
-    function addMessage(text, cls) {
+    function addMessage(text, cls, persist = true) {
+      // ✅ Force text to string so marked never breaks
+      text = safeToString(text);
+
       const div = document.createElement("div");
       div.className = "message " + cls;
-      div.innerHTML = marked.parse(text);
+
+      try {
+        div.innerHTML = marked.parse(text);
+      } catch (err) {
+        console.error("Markdown render error:", err);
+        div.textContent = text;
+      }
+
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
 
-      messages.push({
-        role: cls === "user" ? "user" : "bot",
-        content: text
+      // ✅ Copy buttons: copy the actual code text only
+      div.querySelectorAll("[data-copy-btn]").forEach(btn => {
+        btn.addEventListener("click", function() {
+          const codeEl = this.parentElement?.querySelector("pre code");
+          const codeText = codeEl ? codeEl.innerText : "";
+          navigator.clipboard.writeText(codeText).then(() => {
+            const old = this.innerText;
+            this.innerText = "Copied!";
+            setTimeout(() => this.innerText = old, 1200);
+          });
+        });
       });
 
-      saveMessages(messages);
+      if (persist) {
+        messages.push({
+          role: cls === "user" ? "user" : "bot",
+          content: text
+        });
+        saveMessages(messages);
+      }
     }
 
     function showThinking() {
@@ -247,58 +374,28 @@
 
       try {
         const res = await fetch(`/ask?q=${encodeURIComponent(q)}`);
-        const data = await res.json();
 
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error(`HTTP ${res.status}:`, errorText);
+          hideThinking();
+          addMessage(`❌ Server error ${res.status}: ${errorText}`, "bot");
+          return;
+        }
+
+        const data = await res.json();
         hideThinking();
+
+        // ✅ This should be string; if not, we stringify in addMessage anyway
+        console.log("BOT RESPONSE TYPE:", typeof data.response, data.response);
         addMessage(data.response, "bot");
 
       } catch (err) {
+        console.error("Fetch error:", err);
         hideThinking();
-        addMessage("❌ Error contacting DevOps Agent.", "bot");
+        addMessage(`❌ Error: ${err.message}`, "bot");
       }
     }
-
-    // async function send() {
-    //     const q = input.value.trim();
-    //     if (!q) return;
-
-    //     // 🔹 Clear input immediately (UX fix)
-    //     input.value = "";
-
-    //     // 🔹 Show user message
-    //     addMessage(q, "user");
-    //     showThinking();
-
-    //     // 🔹 Abort controller for timeout
-    //     const controller = new AbortController();
-    //     const timeout = setTimeout(() => controller.abort(), 60000); // 60s
-
-    //     try {
-    //       const res = await fetch("/ask", {
-    //         method: "POST",
-    //         headers: {
-    //           "Content-Type": "application/json"
-    //         },
-    //         body: JSON.stringify({ question: q }),
-    //         signal: controller.signal
-    //       });
-      
-    //       if (!res.ok) {
-    //         throw new Error(`HTTP ${res.status}`);
-    //       }
-      
-    //       const data = await res.json();
-    //       addMessage(data.response, "bot");
-      
-    //      } catch (err) {
-    //       console.error(err);
-    //       addMessage("❌ Agent did not respond. Please try again.", "bot");
-        
-    //      } finally {
-    //       clearTimeout(timeout);
-    //       hideThinking();
-    //     }
-// }
   </script>
 
 </body>
