@@ -99,4 +99,21 @@ The agent is **grounded, auditable, and constrained** by RAG and tools.
 
 <img width="1252" height="580" alt="image" src="https://github.com/user-attachments/assets/bbfb65f8-fd42-4be5-8914-526c9cda8b81" />
 
+---
+
+## etcd Quorum Loss (kubernetes issue)
+
+<img width="1879" height="828" alt="image" src="https://github.com/user-attachments/assets/b77af775-ac91-465e-8853-c2d65d75f076" />
+
+---
+<img width="1894" height="824" alt="image" src="https://github.com/user-attachments/assets/f61965a2-9b8b-42d3-a6a5-9ef63b657e7d" />
+
+---
+## Service Not Reachable (kubernetes issue)
+
+<img width="1897" height="824" alt="image" src="https://github.com/user-attachments/assets/b0f76565-4e0e-414d-8a5d-427fd7f06125" />
+
+---
+
+<img width="1894" height="827" alt="image" src="https://github.com/user-attachments/assets/3106d716-09f1-466c-b230-f55785eb689f" />
 
