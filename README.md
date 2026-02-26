@@ -37,26 +37,101 @@ The focus is on **hands-on experimentation and knowledge validation**, rather th
 ## Architecture Overview
 
 ```
-┌─────────────┐
-│ DevOps User │
-└──────┬──────┘
-       │
-       ▼
-┌──────────────────┐
-│ Agent Orchestrator│
-└──────┬───────────┘
-       │
-       |
-       │
-       ├─► RAG Retriever
-       │     ├─ Vector DB
-       │     └─ Document Index
-       │
-       ▼
-┌──────────────────┐
-│ Local LLM        |
-|   (Ollama)       │                
-└──────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                DevOps User                                   │
+│                     (question, error logs, timeouts, etc.)                   │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         CLI / App Entry (main loop)                           │
+│     - Reads user input                                                        │
+│     - Sends query to agent build_chain(query)                                 │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         Agent Orchestrator / Factory                          │
+│                               get_agent()                                     │
+│  Creates:                                                                      │
+│   - Ollama LLM (llama3)                                                        │
+│   - Ollama Embeddings (nomic-embed-text)                                       │
+│   - ChatPromptTemplate (guardrails + formats)                                  │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          Query Router (resolve_collection)                    │
+│  Input : query string                                                         │
+│  Logic : keyword match scoring across domains                                  │
+│                                                                              │
+│   Collections:                                                                 │
+│    - kubernetes-networking  (cni, calico, ingress, networkpolicy, dns...)     │
+│    - k8s-storage            (pv, pvc, csi, storageclass...)                   │
+│    - terraform              (terraform, provider, state...)                   │
+│                                                                              │
+│  Output: selected collection_name (string)                                     │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    Vector Store Loader (Chroma Client)                         │
+│   Chroma(                                                                     │
+│     persist_directory="./chroma",                                             │
+│     embedding_function=OllamaEmbeddings("nomic-embed-text"),                   │
+│     collection_name=<routed_collection>                                       │
+│   )                                                                            │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         Retriever Builder (get_retriever)                     │
+│   db.as_retriever(                                                            │
+│     search_type="similarity",                                                 │
+│     search_kwargs={"k": 5}                                                    │
+│   )                                                                            │
+│                                                                              │
+│  Output: retriever                                                            │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           Retrieval Step (RAG)                                │
+│   retriever(query) → returns Top-K relevant docs/snippets                      │
+│                                                                              │
+│  Output: context (documents)                                                  │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                     Prompt Assembly + Guardrails Layer                        │
+│   ChatPromptTemplate injects:                                                  │
+│    - "Context: {context}"                                                     │
+│    - "Question: {question}"                                                   │
+│                                                                              │
+│   Built-in behavior (from your prompt):                                       │
+│    - Intent detection (errors/logs → Troubleshooting format)                  │
+│    - Commands allowed ONLY in troubleshooting                                 │
+│    - Commands must be in ```bash blocks                                       │
+│    - If missing context → say "I don't know..."                               │
+│    - "No diagnostic commands found..." fallback                               │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           Local LLM Inference (Ollama)                        │
+│                     OllamaLLM(model="llama3", temp=0.7)                       │
+│                                                                              │
+│  Output: final response in strict Markdown format                             │
+└───────────────────────────────────┬──────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                Output to User                                │
+│     - Markdown answer                                                         
+│     - Troubleshooting or Concept format                                      │
+│     - Commands only when allowed                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
